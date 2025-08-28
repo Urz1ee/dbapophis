@@ -1,245 +1,97 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>QRIS — Ubah Nama Merchant (Client-side)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: Inter, system-ui, Arial; background:#f4f6f9; margin:0; padding:20px; }
-    .card { background:#fff; border-radius:12px; padding:18px; max-width:800px; margin:18px auto; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
-    h1 { font-size:20px; margin:0 0 10px; }
-    label { display:block; font-weight:600; margin:10px 0 6px; }
-    input[type="file"] { padding:6px; }
-    input[type="text"], textarea { width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:14px }
-    button { margin-top:8px; padding:10px 12px; border-radius:8px; background:#0069ff; color:#fff; border:none; cursor:pointer }
-    button.secondary { background:#6c757d }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap }
-    .col { flex:1; min-width:220px }
-    canvas { display:none }
-    .qr-preview { text-align:center; margin-top:12px }
-    pre { white-space:pre-wrap; word-break:break-word; background:#f8f9fb; padding:10px; border-radius:8px; border:1px solid #eee }
-    .meta { font-size:13px; color:#444; margin-top:6px }
-  </style>
+  <meta charset="UTF-8">
+  <title>Edit Nama QRIS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-  <div class="card">
-    <h1>QRIS — Ubah Nama Merchant (Client-only)</h1>
+  <h2>Edit Nama QRIS</h2>
 
-    <label>1) Upload gambar QRIS</label>
-    <input id="fileInput" type="file" accept="image/*" />
+  <!-- Tempat input string QRIS -->
+  <textarea id="qrisInput" rows="6" cols="50" placeholder="Tempel string QRIS di sini..."></textarea><br><br>
 
-    <div id="status" class="meta">Belum ada file.</div>
+  <!-- Input nama baru -->
+  <input id="newName" placeholder="Nama baru"><br><br>
 
-    <div id="dataArea" style="display:none; margin-top:12px;">
-      <h3>2) Data QRIS ter-decode</h3>
-      <div class="row">
-        <div class="col">
-          <label>String QRIS (decoded):</label>
-          <textarea id="decodedText" rows="4" readonly></textarea>
-        </div>
-        <div class="col">
-          <label>Informasi (tag penting)</label>
-          <div id="infoList"></div>
-        </div>
-      </div>
+  <button onclick="generateQR()">Generate QR</button>
+  <button onclick="downloadQR()">Download QR</button>
 
-      <label>3) Masukkan Nama Merchant Baru (tag 59)</label>
-      <input id="newName" type="text" placeholder="Contoh: TOKO ABC" />
-
-      <div style="margin-top:8px;">
-        <button id="applyBtn">Buat QRIS Baru (Ganti nama)</button>
-        <button id="copyBtn" class="secondary" style="margin-left:8px;">Salin string baru</button>
-      </div>
-
-      <div id="resultArea" style="display:none; margin-top:12px;">
-        <h3>Hasil QRIS baru</h3>
-        <label>String QRIS baru:</label>
-        <textarea id="newQrisText" rows="4" readonly></textarea>
-        <div class="qr-preview" id="qrContainer"></div>
-        <div style="margin-top:8px;">
-          <button id="downloadPng">Download QR PNG</button>
-        </div>
-      </div>
-    </div>
-
-    <canvas id="hiddenCanvas"></canvas>
-  </div>
-
-  <!-- libs -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <div id="qrcode" style="margin-top:20px;"></div>
 
   <script>
-  // ------------------------
-  // Helper: parse EMV but keep order (array of {tag,len,val})
-  function parseEMVString(s) {
-    const res = [];
-    let i = 0;
-    while (i + 4 <= s.length) {
-      const tag = s.substr(i, 2);
-      const lenStr = s.substr(i+2, 2);
-      if (!/^\d{2}$/.test(lenStr)) break;
-      const len = parseInt(lenStr, 10);
-      const val = s.substr(i+4, len);
-      res.push({tag, len, val});
-      i += 4 + len;
-    }
-    return res;
-  }
+    let qrcode;
 
-  function emvArrayToString(arr, omitCRC=true) {
-    let out = '';
-    for (const item of arr) {
-      if (omitCRC && item.tag === '63') continue;
-      out += item.tag + String(item.val.length).padStart(2,'0') + item.val;
-    }
-    return out;
-  }
-
-  // CRC-CCITT (poly 0x1021) initial 0xFFFF, returns 16-bit integer
-  function crc16ccitt(str) {
-    // compute over ASCII bytes of string
-    let crc = 0xFFFF;
-    for (let i=0;i<str.length;i++){
-      crc ^= (str.charCodeAt(i) << 8);
-      for (let j=0;j<8;j++){
-        if (crc & 0x8000) crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
-        else crc = (crc << 1) & 0xFFFF;
+    // Fungsi hitung CRC16-CCITT
+    function crc16ccitt(str) {
+      let crc = 0xFFFF;
+      for (let c of str) {
+        crc ^= c.charCodeAt(0) << 8;
+        for (let i = 0; i < 8; i++) {
+          if (crc & 0x8000) {
+            crc = (crc << 1) ^ 0x1021;
+          } else {
+            crc <<= 1;
+          }
+          crc &= 0xFFFF;
+        }
       }
+      return crc.toString(16).toUpperCase().padStart(4, "0");
     }
-    return crc & 0xFFFF;
-  }
 
-  // Insert/replace tag 59 in array; if not present, insert before last '63' or append
-  function setTagValue(arr, tag, newVal) {
-    for (let i=0;i<arr.length;i++){
-      if (arr[i].tag === tag) { arr[i].val = newVal; arr[i].len = newVal.length; return arr; }
+    // Ganti nama di tag 59 (Merchant Name)
+    function replaceName(qris, newName) {
+      const regex = /59(\d{2})([0-9A-Z ]+)/;
+      const match = qris.match(regex);
+      if (!match) return qris;
+
+      const newLen = newName.length.toString().padStart(2, "0");
+      let newQris = qris.replace(regex, "59" + newLen + newName);
+
+      // buang CRC lama
+      newQris = newQris.replace(/6304.{4}$/, "");
+
+      // hitung ulang CRC
+      const crc = crc16ccitt(newQris + "6304");
+      return newQris + "6304" + crc;
     }
-    // not found -> insert before CRC if exists
-    const idxCRC = arr.findIndex(x=>x.tag==='63');
-    const obj = {tag: tag, len: newVal.length, val: newVal};
-    if (idxCRC >= 0) arr.splice(idxCRC, 0, obj);
-    else arr.push(obj);
-    return arr;
-  }
 
-  // decode QR from uploaded image using jsQR
-  const fileInput = document.getElementById('fileInput');
-  const canvas = document.getElementById('hiddenCanvas');
-  const ctx = canvas.getContext('2d');
-  const status = document.getElementById('status');
-  const dataArea = document.getElementById('dataArea');
-  const decodedText = document.getElementById('decodedText');
-  const infoList = document.getElementById('infoList');
-  const applyBtn = document.getElementById('applyBtn');
-  const newNameInput = document.getElementById('newName');
-  const resultArea = document.getElementById('resultArea');
-  const newQrisText = document.getElementById('newQrisText');
-  const qrContainer = document.getElementById('qrContainer');
-  const copyBtn = document.getElementById('copyBtn');
-  const downloadPng = document.getElementById('downloadPng');
-  let lastParsedArr = null;
-  let lastDecoded = '';
+    function generateQR() {
+      const qris = document.getElementById("qrisInput").value.trim();
+      const newName = document.getElementById("newName").value.trim();
 
-  fileInput.addEventListener('change', async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    status.textContent = 'Membaca gambar...';
-    dataArea.style.display = 'none';
-    resultArea.style.display = 'none';
-    qrContainer.innerHTML = '';
-    newQrisText.value = '';
-
-    const img = new Image();
-    img.onload = () => {
-      // resize canvas to image size (limit to reasonable)
-      const max = 1200;
-      let w = img.width, h = img.height;
-      if (w > max || h > max) {
-        const scale = Math.min(max/w, max/h);
-        w = Math.floor(w*scale); h = Math.floor(h*scale);
-      }
-      canvas.width = w; canvas.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      const imgData = ctx.getImageData(0,0,w,h);
-      const code = jsQR(imgData.data, w, h);
-      if (!code) {
-        status.innerHTML = "<span style='color:red'>Gagal decode QR — pastikan foto QR jelas dan bukan blur.</span>";
+      if (!qris || !newName) {
+        alert("Isi QRIS dan Nama baru dulu!");
         return;
       }
-      lastDecoded = code.data;
-      decodedText.value = lastDecoded;
-      status.textContent = 'Berhasil decode QR.';
-      displayParsed(lastDecoded);
-    };
-    img.onerror = () => { status.textContent = 'Gagal memuat gambar.' };
-    img.src = URL.createObjectURL(f);
-  });
 
-  function displayParsed(qrisStr) {
-    lastParsedArr = parseEMVString(qrisStr);
-    dataArea.style.display = 'block';
-    // show some main tags
-    const findVal = (tag) => {
-      const it = lastParsedArr.find(x=>x.tag===tag);
-      return it ? it.val : '-';
-    };
-    infoList.innerHTML = `
-      <div><b>Tag 59 (Nama Merchant):</b> ${escapeHtml(findVal('59'))}</div>
-      <div><b>Tag 60 (Merchant City):</b> ${escapeHtml(findVal('60'))}</div>
-      <div><b>Tag 26 (Merchant Data):</b> ${escapeHtml(findVal('26'))}</div>
-      <div style="margin-top:8px"><b>Semua tag (urut):</b></div>
-      <pre>${escapeHtml(lastParsedArr.map(x=>x.tag+': '+x.val).join('\n'))}</pre>
-    `;
-  }
+      const newQris = replaceName(qris, newName);
 
-  applyBtn.addEventListener('click', () => {
-    if (!lastParsedArr) { alert('Belum ada QR yang didecode.'); return; }
-    const newName = newNameInput.value.trim();
-    if (!newName) { alert('Isi nama merchant baru.'); return; }
+      // clear QR lama
+      document.getElementById("qrcode").innerHTML = "";
 
-    // modify copy of array
-    const arrCopy = JSON.parse(JSON.stringify(lastParsedArr));
-    setTagValue(arrCopy, '59', newName);
-
-    // build string without CRC (omit 63)
-    const noCrcStr = emvArrayToString(arrCopy, true);
-
-    // compute CRC over (noCrcStr + '6304') bytes
-    const strForCrc = noCrcStr + '6304';
-    const crcVal = crc16ccitt(strForCrc);
-    const crcHex = crcVal.toString(16).toUpperCase().padStart(4,'0');
-
-    const final = noCrcStr + '63' + '04' + crcHex;
-
-    // show result and QR
-    newQrisText.value = final;
-    resultArea.style.display = 'block';
-    qrContainer.innerHTML = '';
-    // generate QR image
-    new QRCode(qrContainer, { text: final, width: 220, height: 220 });
-  });
-
-  copyBtn.addEventListener('click', () => {
-    const txt = newQrisText.value || decodedText.value;
-    if (!txt) return alert('Belum ada string untuk disalin.');
-    navigator.clipboard.writeText(txt).then(()=> alert('Tersalin ke clipboard.'));
-  });
-
-  downloadPng.addEventListener('click', () => {
-    const img = qrContainer.querySelector('img') || qrContainer.querySelector('canvas');
-    if (!img) return alert('QR belum dibuat.');
-    // for <img> (generated by qrcodejs), fetch src and download
-    if (img.tagName.toLowerCase() === 'img') {
-      const a = document.createElement('a'); a.href = img.src; a.download = 'qris.png'; a.click();
-    } else {
-      // canvas
-      const a = document.createElement('a'); a.href = img.toDataURL('image/png'); a.download='qris.png'; a.click();
+      qrcode = new QRCode(document.getElementById("qrcode"), {
+        text: newQris,
+        width: 256,
+        height: 256
+      });
     }
-  });
 
-  // small helper
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
+    function downloadQR() {
+      if (!qrcode) {
+        alert("Buat QR dulu!");
+        return;
+      }
+      const canvas = document.querySelector("#qrcode canvas");
+      if (!canvas) {
+        alert("QR belum digenerate!");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = "qris.png";
+      link.click();
+    }
   </script>
 </body>
 </html>
