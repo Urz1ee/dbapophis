@@ -10,12 +10,19 @@
   <h2>QRIS Editor</h2>
 
   <input type="file" accept="image/*" id="fileInput"><br><br>
+
+  <div>
+    <label>Nama lama:</label>
+    <input id="oldName" readonly>
+  </div><br>
+
   <div>
     <label>Nama baru:</label>
     <input id="newName" placeholder="contoh: ZIEE">
   </div><br>
-  <button onclick="processQR()">Generate QR Baru</button>
-  <button onclick="downloadQR()">Download QR</button>
+
+  <button id="generateBtn">Generate QR Baru</button>
+  <button id="downloadBtn">Download QR</button>
 
   <h3>QR Hasil:</h3>
   <div id="qrcode"></div>
@@ -37,12 +44,17 @@
       return crc.toString(16).toUpperCase().padStart(4, "0");
     }
 
-    // replace merchant name (tag 59)
-    function replaceName(qris, newName) {
-      const regex = /59(\d{2})([0-9A-Z ]+)/;
+    // ambil nama merchant (tag 59)
+    function getMerchantName(qris) {
+      const regex = /59(\d{2})([0-9A-Za-z ]+)/;
       const match = qris.match(regex);
-      if (!match) return qris;
+      if (!match) return "";
+      return match[2].substring(0, parseInt(match[1]));
+    }
 
+    // ganti nama merchant
+    function replaceName(qris, newName) {
+      const regex = /59\d{2}[0-9A-Za-z ]+/;
       const newLen = newName.length.toString().padStart(2, "0");
       let newQris = qris.replace(regex, "59" + newLen + newName);
 
@@ -72,7 +84,9 @@
           const code = jsQR(imageData.data, canvas.width, canvas.height);
           if (code) {
             qrisString = code.data.trim();
-            alert("QRIS berhasil dibaca:\n" + qrisString);
+            const oldName = getMerchantName(qrisString);
+            document.getElementById("oldName").value = oldName || "(nama tidak terbaca)";
+            alert("QRIS berhasil dibaca!");
           } else {
             alert("Gagal membaca QRIS!");
           }
@@ -82,7 +96,8 @@
       reader.readAsDataURL(file);
     });
 
-    function processQR() {
+    // generate QR baru
+    document.getElementById("generateBtn").addEventListener("click", function() {
       if (!qrisString) {
         alert("Upload QRIS dulu!");
         return;
@@ -103,9 +118,10 @@
       });
 
       alert("QRIS berhasil dibuat dengan nama baru: " + newName);
-    }
+    });
 
-    function downloadQR() {
+    // download QR
+    document.getElementById("downloadBtn").addEventListener("click", function() {
       if (!qrcode) {
         alert("Generate dulu QR baru!");
         return;
@@ -116,7 +132,7 @@
       link.href = canvas.toDataURL("image/png");
       link.download = "qris_new.png";
       link.click();
-    }
+    });
   </script>
 </body>
 </html>
